@@ -1,0 +1,8 @@
+﻿elon.musk@x.com
+sam.altman@openai.com
+satya.nadella@microsoft.com
+sundar.pichai@google.com
+tim.cook@apple.com
+mark.zuckerberg@meta.com
+jensen.huang@nvidia.com
+demis.hassabis@deepmind.google

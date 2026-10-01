@@ -1,0 +1,80 @@
+﻿generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  avatar    String?
+  googleId  String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Sender {
+  id           String     @id @default(uuid())
+  name         String
+  email        String     @unique
+  etherealUser String?
+  etherealPass String?
+  etherealHost String?    @default("smtp.ethereal.email")
+  etherealPort Int?       @default(587)
+  hourlyLimit  Int        @default(100)
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  emails       EmailJob[]
+}
+
+model EmailJob {
+  id                    String    @id @default(uuid())
+  senderId              String
+  sender                Sender    @relation(fields: [senderId], references: [id])
+  recipientEmail        String
+  subject               String
+  body                  String
+  status                String    @default("SCHEDULED") // SCHEDULED, QUEUED, SENDING, SENT, FAILED, RESCHEDULED
+  scheduledAt           DateTime
+  sentAt                DateTime?
+  failureReason         String?
+  retryCount            Int       @default(0)
+  etherealMessageId     String?
+  etherealPreviewUrl    String?
+  bullmqJobId           String?
+  delaySeconds          Int       @default(2)
+  hourlyLimitAtSchedule Int       @default(100)
+  batchId               String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([recipientEmail])
+}
+
+model SlackIntegration {
+  id          String   @id @default("default-slack")
+  webhookUrl  String?
+  channel     String?
+  accessToken String?
+  teamName    String?
+  isConnected Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model RateLimitLog {
+  id            String   @id @default(uuid())
+  senderEmail   String
+  limit         Int
+  currentCount  Int
+  windowKey     String
+  triggeredAt   DateTime @default(now())
+  slackNotified Boolean  @default(false)
+}

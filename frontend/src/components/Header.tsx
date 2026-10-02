@@ -42,7 +42,7 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex flex-wrap items-center gap-3">
         {/* Bull-Board Live Monitor */}
         <a
-          href="http://localhost:5000/admin/queues"
+          href="https://reachinbox-email-scheduler-7-afgl.onrender.com/admin/queues"
           target="_blank"
           rel="noopener noreferrer"
           className="clay-button px-4 py-2.5 flex items-center gap-2 text-xs font-bold text-slate-700 hover:text-indigo-600 group"

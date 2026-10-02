@@ -1,5 +1,4 @@
 ﻿import { Request, Response } from "express";
-import { v4 as uuidv4 } from "uuid";
 import { prisma } from "../prisma/client.js";
 import { scheduleEmailJob, getEmailQueue } from "../queues/email.queue.js";
 import { indexEmailInElasticsearch, searchEmails } from "../services/elasticsearch.service.js";
@@ -238,7 +237,7 @@ export async function getSentEmails(req: Request, res: Response) {
 
 export async function cancelEmail(req: Request, res: Response) {
   try {
-    const { id } = req.params;
+    const id = String(req.params.id);
 
     const email = await prisma.emailJob.findUnique({ where: { id } });
     if (!email) {

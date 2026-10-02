@@ -1,64 +1,121 @@
-﻿import Redis from "ioredis";
-import RedisMock from "ioredis-mock";
+import Redis, { RedisOptions } from "ioredis";
+import net from "net";
 import { config } from "../config/env.js";
 
-let redisClient: Redis;
-let isMock = false;
+let redisClient: Redis | null = null;
+let redisMemoryServer: any = null;
+let redisOptions: RedisOptions = {};
 
-function createRedisConnection(): Redis {
-  try {
-    if (config.redisUrl) {
-      const client = new Redis(config.redisUrl, {
-        maxRetriesPerRequest: null,
-        enableReadyCheck: false,
-        retryStrategy: (times) => {
-          if (times > 3) return null; // fallback after 3 tries
-          return Math.min(times * 100, 1000);
-        }
-      });
-      return client;
-    }
+async function isRedisPortOpen(host: string, port: number, timeoutMs = 1200): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    let status = false;
 
-    const client = new Redis({
-      host: config.redisHost,
-      port: config.redisPort,
-      password: config.redisPassword,
+    socket.setTimeout(timeoutMs);
+
+    socket.on("connect", () => {
+      status = true;
+      socket.destroy();
+    });
+
+    socket.on("timeout", () => {
+      socket.destroy();
+    });
+
+    socket.on("error", () => {
+      socket.destroy();
+    });
+
+    socket.on("close", () => {
+      resolve(status);
+    });
+
+    socket.connect(port, host);
+  });
+}
+
+export async function initRedis(): Promise<Redis> {
+  if (redisClient) return redisClient;
+
+  // Managed Redis via URL (Upstash / Render / Redis Cloud). rediss:// enables TLS automatically.
+  if (config.redisUrl) {
+    console.log("[Redis] Connecting using REDIS_URL");
+    redisOptions = {
       maxRetriesPerRequest: null,
       enableReadyCheck: false,
-      retryStrategy: (times) => {
-        if (times > 2) return null;
-        return Math.min(times * 100, 1000);
-      }
+    };
+    redisClient = new Redis(config.redisUrl, redisOptions);
+    redisClient.on("error", (err) => {
+      console.error("[Redis Error]", err.message);
     });
-
-    client.on("error", (err) => {
-      // Handled silently or logged
-    });
-
-    return client;
-  } catch (error) {
-    console.warn("⚠️ Redis direct connection failed, using in-memory mock fallback");
-    isMock = true;
-    return new RedisMock() as unknown as Redis;
+    return redisClient;
   }
+
+  const targetHost = config.redisHost || "127.0.0.1";
+  const targetPort = config.redisPort || 6379;
+
+  const isExternalAvailable = await isRedisPortOpen(targetHost, targetPort);
+
+  if (isExternalAvailable) {
+    console.log(`[Redis] Connecting to external Redis at ${targetHost}:${targetPort}`);
+    redisOptions = {
+      host: targetHost,
+      port: targetPort,
+      password: config.redisPassword || undefined,
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false,
+    };
+    redisClient = new Redis(redisOptions);
+  } else {
+    console.log("⚠️ External Redis not found. Booting isolated in-memory Redis server...");
+    const { RedisMemoryServer } = await import("redis-memory-server");
+    redisMemoryServer = new RedisMemoryServer();
+    const host = await redisMemoryServer.getHost();
+    const port = await redisMemoryServer.getPort();
+    console.log(`🚀 [Redis] In-memory Redis server running at ${host}:${port}`);
+
+    redisOptions = {
+      host,
+      port,
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false,
+    };
+    redisClient = new Redis(redisOptions);
+  }
+
+  redisClient.on("error", (err) => {
+    console.error("[Redis Error]", err.message);
+  });
+
+  return redisClient;
 }
 
 export function getRedisConnection(): Redis {
   if (!redisClient) {
-    redisClient = createRedisConnection();
+    // Synchronous fallback if called before initRedis finishes
+        if (config.redisUrl) {
+      redisOptions = { maxRetriesPerRequest: null, enableReadyCheck: false };
+      redisClient = new Redis(config.redisUrl, redisOptions);
+      return redisClient;
+    }
+    const targetHost = config.redisHost || "127.0.0.1";
+    const targetPort = config.redisPort || 6379;
+    redisOptions = {
+      host: targetHost,
+      port: targetPort,
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false,
+    };
+    redisClient = new Redis(redisOptions);
   }
   return redisClient;
 }
 
-export function createNewRedisClient(): Redis {
-  try {
-    if (isMock) {
-      return new RedisMock() as unknown as Redis;
-    }
-    return createRedisConnection();
-  } catch {
-    return new RedisMock() as unknown as Redis;
+export function getRedisOptions(): RedisOptions {
+  if (!redisClient) {
+    getRedisConnection();
   }
+  return redisOptions;
 }
 
 export function getHourWindowKey(date = new Date()): string {

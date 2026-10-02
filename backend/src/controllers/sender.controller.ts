@@ -46,7 +46,7 @@ export async function createSender(req: Request, res: Response) {
 
 export async function updateSender(req: Request, res: Response) {
   try {
-    const { id } = req.params;
+    const id = String(req.params.id);
     const { name, hourlyLimit, isActive } = req.body;
 
     const sender = await prisma.sender.update({
